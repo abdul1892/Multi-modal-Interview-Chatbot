@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Interviews · AI Interviewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 28px 24px;
+        }
+
+        .wrap { max-width: 1100px; margin: 0 auto; }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+        }
+        .brand {
+            font-size: 24px;
+            font-weight: 600;
+            color: #f8fafc;
+            letter-spacing: -0.3px;
+        }
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-size: 13px;
+        }
+        .user-pill {
+            color: #94a3b8;
+        }
+        .user-pill strong { color: #f8fafc; font-weight: 500; }
+        .top-actions a {
+            color: #38bdf8;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .top-actions a:hover { text-decoration: underline; }
+
+        h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #38bdf8;
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        .empty-state {
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 14px;
+            padding: 60px 30px;
+            text-align: center;
+            color: #64748b;
+        }
+        .empty-state strong { color: #e2e8f0; display: block; font-size: 15px; margin-bottom: 8px; }
+        .empty-state a {
+            display: inline-block;
+            margin-top: 18px;
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        .empty-state a:hover { background: #1d4ed8; }
+
+        .interview-list {
+            display: grid;
+            gap: 14px;
+        }
+        .interview-card {
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 20px 22px;
+            display: grid;
+            /* Fixed columns so every row lines up regardless of button width */
+            grid-template-columns: 130px repeat(3, minmax(110px, 1fr)) 160px;
+            gap: 20px;
+            align-items: center;
+            transition: border-color 0.2s;
+        }
+        .interview-card:hover { border-color: #2a3348; }
+
+        .date-large {
+            font-size: 18px;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+        .date-meta {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        .score-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 4px;
+        }
+        .score-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #4ade80;
+        }
+        .score-value.rounds { color: #a78bfa; }
+        .score-value.conf { color: #fbbf24; }
+        .score-value.pending {
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 500;
+            font-style: italic;
+        }
+
+        .interview-action {
+            justify-self: end;   /* pin button to the right edge */
+        }
+        .download-btn {
+            background: #10b981;
+            color: white;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: background 0.2s;
+            white-space: nowrap;
+            display: inline-block;
+        }
+        .download-btn:hover { background: #059669; }
+        .download-btn.disabled {
+            background: #334155;
+            color: #64748b;
+            pointer-events: none;
+        }
+
+        /* ===== Progress trend card ===== */
+        .trend-card {
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 14px;
+            padding: 22px 24px 18px;
+            margin-bottom: 26px;
+        }
+        .trend-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+        .trend-head h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+        .trend-sub {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 14px;
+        }
+        .trend-canvas-wrap { position: relative; height: 280px; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="top-bar">
+            <div class="brand">AI Interviewer</div>
+            <div class="top-actions">
+                <span class="user-pill">Signed in as <strong>{{ username }}</strong></span>
+                <a href="{{ url_for('index') }}">New interview</a>
+                <a href="{{ url_for('auth.logout') }}">Sign out</a>
+            </div>
+        </div>
+
+        {% if trend and trend|length > 1 %}
+        <div class="trend-card">
+            <div class="trend-head">
+                <h3>Your progress</h3>
+            </div>
+            <div class="trend-canvas-wrap">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+        {% endif %}
+
+        <h2>My Interviews</h2>
+
+        {% if not interviews %}
+            <div class="empty-state">
+                <strong>No interviews yet</strong>
+                Your completed sessions will appear here.
+                <br><a href="{{ url_for('index') }}">Start your first interview</a>
+            </div>
+        {% else %}
+            <div class="interview-list">
+                {% for iv in interviews %}
+                    <div class="interview-card">
+                        <div>
+                            <div class="date-large">{{ iv.session_date.strftime('%b %d') if iv.session_date else '—' }}</div>
+                            <div class="date-meta">{{ iv.session_date.strftime('%Y · %H:%M') if iv.session_date else '' }}</div>
+                        </div>
+
+                        <div>
+                            <div class="score-label">Rounds</div>
+                            <div class="score-value rounds">{{ iv.round_count }}</div>
+                        </div>
+
+                        <div>
+                            <div class="score-label">Avg Tech</div>
+                            {% if iv.round_count > 0 %}
+                                <div class="score-value">{{ '%.1f' % iv.avg_tech_score }}/10</div>
+                            {% else %}
+                                <div class="score-value pending">—</div>
+                            {% endif %}
+                        </div>
+
+                        <div>
+                            <div class="score-label">Avg Confidence</div>
+                            {% if iv.round_count > 0 %}
+                                <div class="score-value conf">{{ '%.1f' % iv.avg_conf_score }}/10</div>
+                            {% else %}
+                                <div class="score-value pending">—</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="interview-action">
+                            {% if iv.is_complete %}
+                                <a href="{{ url_for('download_report_by_id', interview_id=iv.id) }}" class="download-btn">
+                                    📥 Download PDF
+                                </a>
+                            {% else %}
+                                <span class="download-btn disabled">Incomplete</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        const TREND = {{ trend|tojson }};
+        if (TREND && TREND.length > 1) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            const mk = (label, key, color) => ({
+                label, data: TREND.map(t => t[key]),
+                borderColor: color, backgroundColor: color,
+                pointBackgroundColor: color, borderWidth: 2,
+                tension: 0.25, pointRadius: 4, pointHoverRadius: 6,
+            });
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: TREND.map(t => t.date),
+                    datasets: [
+                        mk('Technical', 'tech', '#38bdf8'),
+                        mk('Vocal Confidence', 'conf', '#10b981'),
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: {
+                            min: 0, max: 10,
+                            ticks: { color: '#94a3b8', stepSize: 2 },
+                            grid: { color: '#1f2937' },
+                            title: { display: true, text: 'Score (0–10)', color: '#64748b' }
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#131826' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#e2e8f0', usePointStyle: true } },
+                        tooltip: {
+                            backgroundColor: '#0a0e1a',
+                            borderColor: '#1f2937', borderWidth: 1,
+                            titleColor: '#f8fafc', bodyColor: '#e2e8f0'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

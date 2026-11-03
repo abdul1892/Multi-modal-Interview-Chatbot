@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In · AI Interviewer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .auth-card {
+            width: 100%;
+            max-width: 420px;
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 16px;
+            padding: 40px 36px;
+        }
+
+        .auth-brand {
+            font-size: 13px;
+            font-weight: 600;
+            color: #38bdf8;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        .auth-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 6px;
+            letter-spacing: -0.3px;
+        }
+        .auth-sub {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 28px;
+        }
+
+        .flash {
+            background: rgba(127, 29, 29, 0.35);
+            border: 1px solid #ef4444;
+            color: #fecaca;
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin-bottom: 18px;
+            font-size: 13px;
+        }
+        .flash.info {
+            background: rgba(30, 64, 175, 0.25);
+            border-color: #3b82f6;
+            color: #bfdbfe;
+        }
+
+        .form-field { margin-bottom: 16px; }
+        .form-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        .form-input {
+            width: 100%;
+            background: #1a2233;
+            border: 1px solid #2a3348;
+            border-radius: 9px;
+            padding: 12px 14px;
+            color: #e2e8f0;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #38bdf8;
+        }
+
+        .submit-btn {
+            width: 100%;
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 13px;
+            border-radius: 9px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 8px;
+            font-family: inherit;
+        }
+        .submit-btn:hover { background: #1d4ed8; }
+
+        .auth-footer {
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 1px solid #1f2937;
+            text-align: center;
+            font-size: 13px;
+            color: #64748b;
+        }
+        .auth-footer a {
+            color: #38bdf8;
+            text-decoration: none;
+            font-weight: 500;
+            margin-left: 4px;
+        }
+        .auth-footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <div class="auth-brand">AI Interviewer</div>
+        <h1 class="auth-title">Welcome back</h1>
+        <p class="auth-sub">Sign in to continue your interview history.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash {{ 'info' if category == 'info' else '' }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('auth.login') }}">
+            <div class="form-field">
+                <label class="form-label" for="identifier">Username or email</label>
+                <input type="text" id="identifier" name="identifier" class="form-input"
+                       value="{{ identifier or '' }}" autocomplete="username" required autofocus>
+            </div>
+
+            <div class="form-field">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" id="password" name="password" class="form-input"
+                       autocomplete="current-password" required>
+            </div>
+
+            <button type="submit" class="submit-btn">Sign in</button>
+        </form>
+
+        <div class="auth-footer">
+            Don't have an account?
+            <a href="{{ url_for('auth.signup') }}">Create one</a>
+        </div>
+    </div>
+</body>
+</html>

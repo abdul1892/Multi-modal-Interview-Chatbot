@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Interviewer</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 28px 24px;
+            line-height: 1.5;
+        }
+
+        button { font-family: inherit; cursor: pointer; border: none; }
+        button:disabled { cursor: not-allowed; }
+
+        /* ===== Header (with user/logout) ===== */
+        .app-header {
+            max-width: 1400px;
+            margin: 0 auto 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+        .app-title {
+            font-size: 26px;
+            font-weight: 600;
+            color: #f8fafc;
+            letter-spacing: -0.3px;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-size: 13px;
+        }
+        .user-pill { color: #94a3b8; }
+        .user-pill strong { color: #f8fafc; font-weight: 500; }
+        .header-link {
+            color: #38bdf8;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .header-link:hover { text-decoration: underline; }
+        .header-link.muted { color: #64748b; }
+        .header-link.muted:hover { color: #94a3b8; }
+
+        .error-banner {
+            max-width: 1400px;
+            margin: 0 auto 16px;
+            background: rgba(127, 29, 29, 0.4);
+            border: 1px solid #ef4444;
+            color: #fecaca;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            display: none;
+        }
+
+        /* ============ SETUP SCREEN ============ */
+        .setup-container { max-width: 540px; margin: 60px auto 0; }
+        .setup-card {
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 16px;
+            padding: 36px;
+        }
+        .setup-card h2 {
+            font-size: 20px;
+            font-weight: 500;
+            color: #f8fafc;
+            margin-bottom: 6px;
+        }
+        .setup-card .setup-sub {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 28px;
+        }
+        .setup-section { margin-bottom: 22px; }
+        .setup-section label {
+            display: block;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .file-input {
+            width: 100%;
+            padding: 11px 12px;
+            background: #1a2233;
+            border: 1px solid #2a3348;
+            border-radius: 9px;
+            color: #e2e8f0;
+            font-size: 13px;
+            cursor: pointer;
+            margin-bottom: 12px;
+            font-family: inherit;
+        }
+        .upload-btn {
+            width: 100%;
+            background: #6366f1;
+            color: white;
+            padding: 11px;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            transition: background 0.2s;
+        }
+        .upload-btn:hover { background: #4f46e5; }
+        .upload-status {
+            font-size: 12px;
+            color: #34d399;
+            margin-top: 12px;
+            line-height: 1.5;
+            display: none;
+            word-break: break-word;
+        }
+        .upload-status.visible { display: block; }
+        .start-btn {
+            width: 100%;
+            background: #475569;
+            color: white;
+            padding: 14px;
+            border-radius: 9px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            transition: background 0.2s;
+        }
+        .start-btn:not(:disabled) { background: #2563eb; }
+        .start-btn:not(:disabled):hover { background: #1d4ed8; }
+
+        /* ============ INTERVIEW SCREEN ============ */
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 14px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #38bdf8;
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #1f2937;
+            letter-spacing: 0.2px;
+        }
+        .panel-title.pink { color: #f472b6; }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .metric-box {
+            background: #1a2233;
+            border: 1px solid #2a3348;
+            border-radius: 10px;
+            padding: 14px 12px;
+            text-align: center;
+        }
+        .metric-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 6px;
+        }
+        .metric-value {
+            font-size: 22px;
+            font-weight: 600;
+            color: #4ade80;
+        }
+        .metric-value.topic { color: #a78bfa; }
+        .metric-value.level { color: #f472b6; }
+        .metric-value.status {
+            font-size: 13px;
+            font-weight: 500;
+            color: #fbbf24;
+            margin-top: 8px;
+        }
+
+        .question-section { margin-bottom: 14px; }
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .question-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+        }
+        .tts-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .tts-counter {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .tts-btn {
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #334155;
+            border-radius: 7px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: 'Segoe UI', monospace;
+            letter-spacing: 0.4px;
+            transition: all 0.2s;
+        }
+        .tts-btn:hover:not(:disabled) { background: #334155; }
+        .tts-btn:disabled { opacity: 0.4; }
+        .tts-btn.speaking {
+            background: #38bdf8;
+            color: #0c1220;
+            border-color: #38bdf8;
+        }
+        .question-box {
+            background: #1a2233;
+            border-left: 3px solid #f59e0b;
+            border-radius: 8px;
+            padding: 16px 18px;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #e2e8f0;
+            min-height: 64px;
+            transition: border-left-color 0.4s, box-shadow 0.4s;
+        }
+        .question-box.tts-active {
+            border-left-color: #38bdf8;
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.18);
+        }
+
+        .mic-wave-strip {
+            height: 0;
+            overflow: hidden;
+            transition: height 0.3s ease, margin 0.3s ease;
+        }
+        .mic-wave-strip.active {
+            height: 28px;
+            margin: 4px 0 10px;
+        }
+        .mic-wave-svg {
+            width: 100%;
+            height: 28px;
+            display: block;
+        }
+        .mic-wave-svg path {
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.6));
+        }
+        .mic-wave-svg path:nth-child(1) { stroke: #f59e0b; }
+        .mic-wave-svg path:nth-child(2) { stroke: #fbbf24; opacity: 0.7; }
+        .mic-wave-svg path:nth-child(3) { stroke: #fcd34d; opacity: 0.45; }
+
+        .audio-bar {
+            display: flex;
+            gap: 12px;
+            align-items: stretch;
+            margin-bottom: 16px;
+        }
+        .mic-icon-btn {
+            flex-shrink: 0;
+            width: 64px;
+            background: #ef4444;
+            border-radius: 10px;
+            color: white;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .mic-icon-btn:hover:not(:disabled) { background: #dc2626; }
+        .mic-icon-btn:disabled { background: #334155; }
+        .mic-icon-btn.recording {
+            background: #f59e0b;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        .transcription-bar {
+            flex: 1;
+            background: #0f1626;
+            border: 1px solid #1f2937;
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #cbd5e1;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: vertical;
+            min-height: 80px;
+            transition: border-color 0.2s;
+        }
+        .transcription-bar:focus {
+            outline: none;
+            border-color: #38bdf8;
+        }
+        .transcription-bar:disabled { color: #64748b; }
+
+        .primary-btn {
+            margin-top: auto;
+            width: 100%;
+            background: #10b981;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 14px;
+            border-radius: 10px;
+            transition: background 0.2s;
+            letter-spacing: 0.3px;
+        }
+        .primary-btn:hover:not(:disabled) { background: #059669; }
+        .primary-btn.next { background: #8b5cf6; }
+        .primary-btn.next:hover { background: #7c3aed; }
+        .primary-btn.hidden { display: none; }
+
+        .xai-box {
+            background: #1a2233;
+            border: 1px solid #2a3348;
+            border-radius: 10px;
+            padding: 18px;
+        }
+        .xai-section { margin-bottom: 14px; }
+        .xai-section:last-child { margin-bottom: 0; }
+        .xai-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .xai-label-meta {
+            font-weight: 400;
+            color: #64748b;
+        }
+        .xai-value {
+            background: #0f1626;
+            border-left: 3px solid #38bdf8;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 13px;
+            color: #e2e8f0;
+            font-style: italic;
+            display: block;
+            word-break: break-word;
+        }
+        .xai-value.candidate { border-left-color: #f472b6; }
+        .xai-value.prosody { border-left-color: #fbbf24; }
+        .xai-reason {
+            color: #fbbf24;
+            font-size: 11px;
+            font-style: italic;
+            margin-top: 6px;
+        }
+
+        .report-section {
+            max-width: 1400px;
+            margin: 22px auto 0;
+            background: rgba(6, 78, 59, 0.7);
+            border: 1px solid #10b981;
+            border-radius: 14px;
+            padding: 26px;
+            display: none;
+        }
+        .report-section h2 {
+            color: #34d399;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .report-download {
+            background: #10b981;
+            color: white;
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 18px;
+            transition: background 0.2s;
+        }
+        .report-download:hover { background: #059669; }
+        .report-content {
+            background: rgba(2, 44, 34, 0.6);
+            padding: 18px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #ecfdf5;
+            white-space: pre-line;
+            margin-bottom: 18px;
+        }
+
+        /* ===== Sign-out confirmation modal ===== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.7);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 24px;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal-card {
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 14px;
+            padding: 28px;
+            max-width: 440px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+        }
+        .modal-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 10px;
+        }
+        .modal-body {
+            font-size: 14px;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin-bottom: 22px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .modal-btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+        .modal-btn.cancel {
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+        .modal-btn.cancel:hover { background: #334155; }
+        .modal-btn.confirm {
+            background: #ef4444;
+            color: white;
+        }
+        .modal-btn.confirm:hover { background: #dc2626; }
+    </style>
+</head>
+<body>
+
+    <div class="app-header">
+        <h1 class="app-title">AI Interviewer</h1>
+        <div class="header-actions">
+            <span class="user-pill">Signed in as <strong>{{ username }}</strong></span>
+            <a href="{{ url_for('auth.my_interviews') }}" class="header-link" target="_blank" rel="noopener noreferrer">My interviews</a>
+            <a href="{{ url_for('auth.logout') }}" class="header-link muted" id="btn-signout">Sign out</a>
+        </div>
+    </div>
+
+    <div id="error-banner" class="error-banner"></div>
+
+    <!-- ===== SETUP SCREEN ===== -->
+    <div id="setup-screen" class="setup-container">
+        <div class="setup-card">
+            <h2>Begin Interview</h2>
+            <div class="setup-sub">Upload a candidate resume to dynamically build the skill matrix.</div>
+
+            <div class="setup-section">
+                <label>Resume (PDF, max 10 MB)</label>
+                <input type="file" id="resume-upload" accept=".pdf,application/pdf" class="file-input">
+                <button onclick="uploadResume()" class="upload-btn">Upload &amp; Parse Skills</button>
+                <div id="upload-status" class="upload-status"></div>
+            </div>
+
+            <button id="btn-start" onclick="startInterview()" class="start-btn" disabled>Initialize Interview</button>
+        </div>
+    </div>
+
+    <!-- ===== INTERVIEW SCREEN ===== -->
+    <div id="interview-screen" class="dashboard" style="display: none;">
+        <div class="panel">
+            <div class="panel-title">The Brain: HRL State</div>
+
+            <div class="metric-grid">
+                <div class="metric-box">
+                    <div class="metric-label">Active Topic</div>
+                    <div class="metric-value topic" id="ui-topic">-</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Difficulty Level</div>
+                    <div class="metric-value level" id="ui-level">-</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Macro-Uncertainty</div>
+                    <div class="metric-value" id="ui-uncertainty">-</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">System Status</div>
+                    <div class="metric-value status" id="ui-status">Initializing...</div>
+                </div>
+            </div>
+
+            <div class="question-section">
+                <div class="question-header">
+                    <span class="question-label">Live Question</span>
+                    <div class="tts-controls">
+                        <span class="tts-counter" id="tts-counter"></span>
+                        <button class="tts-btn" id="btn-tts" onclick="toggleTTS()" disabled>🔊 Read Aloud</button>
+                    </div>
+                </div>
+                <div class="question-box" id="ui-question">Awaiting first question...</div>
+            </div>
+
+            <div class="mic-wave-strip" id="mic-wave-strip">
+                <svg class="mic-wave-svg" viewBox="0 0 600 28" preserveAspectRatio="none">
+                    <path id="wave-path-1" d="M0,14 L600,14"/>
+                    <path id="wave-path-2" d="M0,14 L600,14"/>
+                    <path id="wave-path-3" d="M0,14 L600,14"/>
+                </svg>
+            </div>
+
+            <div class="audio-bar">
+                <button id="btn-mic" class="mic-icon-btn" disabled title="Click or press Space to record">🎤</button>
+                <textarea id="ui-transcription" class="transcription-bar" placeholder="Click the mic to record your answer..." disabled></textarea>
+            </div>
+
+            <button id="btn-submit" class="primary-btn hidden" onclick="submitFinalAnswer()">Confirm &amp; Submit Answer</button>
+            <button id="btn-next" class="primary-btn next hidden" onclick="requestNextQuestion()">Next Question ➡️</button>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">The Evaluators: Dual-Stream Analytics</div>
+
+            <div class="metric-grid">
+                <div class="metric-box">
+                    <div class="metric-label">Stream 1: Tech Score</div>
+                    <div class="metric-value" id="ui-tech-score">-</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Stream 2: Confidence</div>
+                    <div class="metric-value" id="ui-conf-score">-</div>
+                </div>
+            </div>
+
+            <div class="xai-box">
+                <div class="panel-title pink" style="font-size: 14px; margin-bottom: 14px; padding-bottom: 10px; border-color: #2a3348;">Explainable AI (XAI) Insight</div>
+
+                <div class="xai-section">
+                    <div class="xai-label">Ideal Reference <span class="xai-label-meta">— what the AI looked for</span></div>
+                    <span class="xai-value" id="xai-ideal">Awaiting evaluation...</span>
+                </div>
+
+                <div class="xai-section">
+                    <div class="xai-label">Candidate Transcript <span class="xai-label-meta">— what it graded</span></div>
+                    <span class="xai-value candidate" id="xai-candidate">Awaiting evaluation...</span>
+                    <div class="xai-reason" id="xai-reason"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Sign-out confirmation modal ===== -->
+    <div id="logout-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="logout-modal-title">
+        <div class="modal-card">
+            <div class="modal-title" id="logout-modal-title">⚠ Sign out mid-interview?</div>
+            <div class="modal-body">
+                If you sign out now, this interview will end and the answers you've given so far won't be saved as a complete report. Are you sure?
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn cancel" id="modal-btn-cancel" type="button">Cancel</button>
+                <button class="modal-btn confirm" id="modal-btn-confirm" type="button">Sign out anyway</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== REPORT SCREEN ===== -->
+    <div id="final-report-container" class="report-section">
+        <h2>📋 Final Executive Evaluation</h2>
+        <button id="btn-download-report" class="report-download">📥 Download Detailed PDF Report</button>
+        <div id="report-text" class="report-content">Generating...</div>
+    </div>
+
+    <script>
+        const socket = io();
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let sessionSid = null;
+        let resumeToken = null;
+        let interviewInProgress = false;   // gates the sign-out warning modal
+
+        const setupScreen      = document.getElementById('setup-screen');
+        const interviewScreen  = document.getElementById('interview-screen');
+        const btnStart         = document.getElementById('btn-start');
+        const btnMic           = document.getElementById('btn-mic');
+        const btnSubmit        = document.getElementById('btn-submit');
+        const btnNext          = document.getElementById('btn-next');
+        const txtTranscription = document.getElementById('ui-transcription');
+        const reportContainer  = document.getElementById('final-report-container');
+        const reportText       = document.getElementById('report-text');
+        const errorBanner      = document.getElementById('error-banner');
+        const btnDownloadReport = document.getElementById('btn-download-report');
+
+        function logMessage(msg) { console.log('[interviewer]', msg); }
+
+        function showError(msg) {
+            errorBanner.innerText = '⚠ ' + msg;
+            errorBanner.style.display = 'block';
+            setTimeout(() => { errorBanner.style.display = 'none'; }, 8000);
+        }
+
+        // ========================================================================
+        //  MIC WAVE VISUALIZER
+        // ========================================================================
+        const micWaveStrip = document.getElementById('mic-wave-strip');
+        const wavePath1 = document.getElementById('wave-path-1');
+        const wavePath2 = document.getElementById('wave-path-2');
+        const wavePath3 = document.getElementById('wave-path-3');
+
+        let audioContext = null;
+        let analyser = null;
+        let micDataArray = null;
+        let micAnimationFrame = null;
+        let isVisualizing = false;
+        let smoothedVolume = 0;
+
+        function setupAudioAnalyser(stream) {
+            try {
+                const Ctx = window.AudioContext || window.webkitAudioContext;
+                audioContext = new Ctx();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.6;
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                micDataArray = new Uint8Array(analyser.frequencyBinCount);
+            } catch (err) {
+                console.error('Audio analyser failed:', err);
+            }
+        }
+
+        function startMicVisualizer() {
+            if (!analyser) return;
+            if (audioContext.state === 'suspended') audioContext.resume();
+            isVisualizing = true;
+            smoothedVolume = 0;
+            micWaveStrip.classList.add('active');
+
+            const startTime = performance.now();
+            function frame(now) {
+                if (!isVisualizing) return;
+                analyser.getByteFrequencyData(micDataArray);
+                let sumSquares = 0;
+                for (let i = 0; i < micDataArray.length; i++) {
+                    sumSquares += micDataArray[i] * micDataArray[i];
+                }
+                const rms = Math.sqrt(sumSquares / micDataArray.length) / 255;
+                smoothedVolume = smoothedVolume * 0.7 + rms * 0.3;
+                const baseAmp = Math.min(12, smoothedVolume * 60);
+
+                const t = (now - startTime) / 1000;
+                wavePath1.setAttribute('d', genWavePath(t, baseAmp,        3.0, 0,   3.5));
+                wavePath2.setAttribute('d', genWavePath(t, baseAmp * 0.75, 4.5, 1.2, 4.2));
+                wavePath3.setAttribute('d', genWavePath(t, baseAmp * 0.55, 6.0, 2.4, 5.0));
+                micAnimationFrame = requestAnimationFrame(frame);
+            }
+            micAnimationFrame = requestAnimationFrame(frame);
+        }
+
+        function stopMicVisualizer() {
+            isVisualizing = false;
+            if (micAnimationFrame) {
+                cancelAnimationFrame(micAnimationFrame);
+                micAnimationFrame = null;
+            }
+            micWaveStrip.classList.remove('active');
+            wavePath1.setAttribute('d', 'M0,14 L600,14');
+            wavePath2.setAttribute('d', 'M0,14 L600,14');
+            wavePath3.setAttribute('d', 'M0,14 L600,14');
+        }
+
+        function genWavePath(t, amp, freq, phase, speed) {
+            const width = 600, midY = 14, steps = 60;
+            let d = '';
+            for (let i = 0; i <= steps; i++) {
+                const x = (i / steps) * width;
+                const env = Math.sin((i / steps) * Math.PI);
+                const ang = (i / steps) * freq * Math.PI * 2 + t * speed + phase;
+                const y = midY + Math.sin(ang) * amp * env;
+                d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(2) + ' ';
+            }
+            return d;
+        }
+
+        // ========================================================================
+        //  TTS (with 2-replay limit per question)
+        // ========================================================================
+        const ttsBtn = document.getElementById('btn-tts');
+        const ttsCounter = document.getElementById('tts-counter');
+        const questionBox = document.getElementById('ui-question');
+        const ttsSupported = ('speechSynthesis' in window);
+        const MAX_REPLAYS = 2;
+
+        let currentQuestionText = "";
+        let isSpeaking = false;
+        let preferredVoice = null;
+        let replayCount = 0;
+
+        function loadVoices() {
+            if (!ttsSupported) return;
+            const voices = speechSynthesis.getVoices();
+            if (!voices.length) return;
+            const preferred = [
+                'Google UK English Male', 'Google US English',
+                'Microsoft Guy Online (Natural) - English (United States)',
+                'Microsoft David - English (United States)',
+                'Microsoft Mark - English (United States)', 'Daniel'
+            ];
+            for (const name of preferred) {
+                const m = voices.find(v => v.name === name);
+                if (m) { preferredVoice = m; return; }
+            }
+            preferredVoice = voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0];
+        }
+        if (ttsSupported) {
+            loadVoices();
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
+        function updateTTSButton() {
+            if (!ttsSupported) {
+                ttsBtn.innerText = 'TTS unavailable';
+                ttsBtn.disabled = true;
+                ttsCounter.innerText = '';
+                return;
+            }
+            if (isSpeaking) {
+                ttsBtn.innerText = '⏹ Stop';
+                ttsBtn.classList.add('speaking');
+                ttsBtn.disabled = false;
+            } else {
+                ttsBtn.classList.remove('speaking');
+                const remaining = Math.max(0, MAX_REPLAYS - replayCount);
+                if (!currentQuestionText) {
+                    ttsBtn.innerText = '🔊 Read Aloud';
+                    ttsBtn.disabled = true;
+                } else if (remaining <= 0) {
+                    ttsBtn.innerText = '🔊 No replays left';
+                    ttsBtn.disabled = true;
+                } else {
+                    ttsBtn.innerText = '🔊 Replay';
+                    ttsBtn.disabled = false;
+                }
+            }
+            ttsCounter.innerText = currentQuestionText
+                ? `${Math.max(0, MAX_REPLAYS - replayCount)} replays left` : '';
+        }
+
+        function speakQuestion(text, isAutoPlay = false) {
+            if (!text || !ttsSupported) return;
+            if (!isAutoPlay && replayCount >= MAX_REPLAYS) return;
+
+            if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+            currentQuestionText = text;
+
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.rate = 0.95;
+            utter.pitch = 1.0;
+            utter.volume = 1.0;
+            if (preferredVoice) utter.voice = preferredVoice;
+
+            utter.onstart = () => {
+                isSpeaking = true;
+                questionBox.classList.add('tts-active');
+                if (!isAutoPlay) replayCount += 1;
+                updateTTSButton();
+            };
+            utter.onend = () => {
+                isSpeaking = false;
+                questionBox.classList.remove('tts-active');
+                updateTTSButton();
+            };
+            utter.onerror = () => {
+                isSpeaking = false;
+                questionBox.classList.remove('tts-active');
+                updateTTSButton();
+            };
+
+            speechSynthesis.speak(utter);
+        }
+
+        function toggleTTS() {
+            if (!ttsSupported) return;
+            if (isSpeaking) stopTTS();
+            else if (currentQuestionText && replayCount < MAX_REPLAYS) speakQuestion(currentQuestionText, false);
+        }
+
+        function stopTTS() {
+            if (!ttsSupported) return;
+            if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+            isSpeaking = false;
+            questionBox.classList.remove('tts-active');
+            updateTTSButton();
+        }
+
+        function resetTTSForNewQuestion() {
+            if (ttsSupported && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
+            isSpeaking = false;
+            questionBox.classList.remove('tts-active');
+            replayCount = 0;
+        }
+
+        updateTTSButton();
+
+        // ========================================================================
+        //  RESUME UPLOAD
+        // ========================================================================
+        function uploadResume() {
+            const fileInput = document.getElementById('resume-upload');
+            if (!fileInput.files.length) { alert('Please select a PDF file first.'); return; }
+            const file = fileInput.files[0];
+            if (file.size > 10 * 1024 * 1024) { showError('File is too large. Maximum size is 10 MB.'); return; }
+            if (!file.name.toLowerCase().endsWith('.pdf')) { showError('Only PDF files are accepted.'); return; }
+
+            const formData = new FormData();
+            formData.append('resume', file);
+
+            fetch('/upload-resume', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        resumeToken = data.resume_token;
+                        const status = document.getElementById('upload-status');
+                        status.classList.add('visible');
+                        status.innerText = 'Skills loaded: ' + JSON.stringify(data.skills);
+                        btnStart.disabled = false;
+                    } else {
+                        showError(data.error || 'Upload failed.');
+                    }
+                })
+                .catch(() => showError('Network error uploading resume.'));
+        }
+
+        // ========================================================================
+        //  INTERVIEW LIFECYCLE
+        // ========================================================================
+        function startInterview() {
+            if (!resumeToken) { showError('Please upload a resume first.'); return; }
+            setupScreen.style.display = 'none';
+            interviewScreen.style.display = 'grid';
+            interviewInProgress = true;   // sign-out now triggers the warning modal
+            socket.emit('start_interview', { resume_token: resumeToken });
+        }
+
+        function submitFinalAnswer() {
+            btnSubmit.classList.add('hidden');
+            txtTranscription.disabled = true;
+            btnMic.disabled = true;
+            socket.emit('submit_final_answer', { edited_text: txtTranscription.value });
+        }
+
+        function requestNextQuestion() {
+            btnNext.classList.add('hidden');
+            document.getElementById('ui-status').innerText = 'Generating...';
+            socket.emit('request_next_question', {});
+        }
+
+        // ========================================================================
+        //  RECORDING
+        // ========================================================================
+        function toggleRecording() {
+            if (!mediaRecorder || btnMic.disabled) return;
+            isRecording ? stopRecording() : startRecording();
+        }
+
+        function startRecording() {
+            stopTTS();
+            isRecording = true;
+            btnMic.classList.add('recording');
+            btnMic.innerText = '🔴';
+            btnMic.title = 'Recording... click or press Space to stop';
+            txtTranscription.value = 'Listening...';
+            mediaRecorder.start();
+            startMicVisualizer();
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            btnMic.classList.remove('recording');
+            btnMic.innerText = '🎤';
+            btnMic.disabled = true;
+            btnMic.title = 'Transcribing...';
+            mediaRecorder.stop();
+            stopMicVisualizer();
+        }
+
+        btnMic.addEventListener('click', toggleRecording);
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !e.repeat
+                && document.activeElement !== txtTranscription
+                && interviewScreen.style.display !== 'none'
+                && !btnMic.disabled) {
+                e.preventDefault();
+                toggleRecording();
+            }
+        });
+
+        btnDownloadReport.addEventListener('click', () => {
+            if (!sessionSid) { showError('No active session. Cannot download report.'); return; }
+            window.location.href = '/download-report?sid=' + encodeURIComponent(sessionSid);
+        });
+
+        // ========================================================================
+        //  SOCKET EVENTS
+        // ========================================================================
+        socket.on('session_ready', (data) => { sessionSid = data.sid; });
+
+        socket.on('error', (data) => {
+            showError(data.message || 'Server error.');
+            btnMic.disabled = false;
+            btnMic.title = 'Click or press Space to record';
+        });
+
+        socket.on('connect', () => {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = () => {
+                    socket.emit('process_live_audio', { audio: new Blob(audioChunks, { type: 'audio/webm' }) });
+                    audioChunks = [];
+                };
+                setupAudioAnalyser(stream);
+            }).catch(() => {
+                showError('Microphone access denied. The interview requires microphone access.');
+            });
+        });
+
+        socket.on('disconnect', () => {
+            showError('Connection lost. Please refresh the page.');
+        });
+
+        socket.on('transcription_review', (data) => {
+            txtTranscription.value = data.text;
+            txtTranscription.disabled = false;
+            btnSubmit.classList.remove('hidden');
+            btnMic.disabled = false;
+            btnMic.title = 'Click to re-record (optional)';
+        });
+
+        socket.on('evaluation_results', (data) => {
+            document.getElementById('ui-status').innerText = data.status;
+            document.getElementById('ui-tech-score').innerText = data.tech_score + ' / 10';
+            document.getElementById('ui-conf-score').innerText = data.confidence_score + ' / 10';
+            document.getElementById('xai-ideal').innerText = data.ideal_answer;
+            document.getElementById('xai-candidate').innerText = data.candidate_answer;
+
+            document.getElementById('xai-reason').innerText =
+                data.rubric_reason ? ('Grader: ' + data.rubric_reason) : '';
+
+            btnNext.classList.remove('hidden');
+        });
+
+        socket.on('telemetry_update', (data) => {
+            document.getElementById('ui-status').innerText = data.status;
+            document.getElementById('ui-topic').innerText = data.topic;
+            document.getElementById('ui-level').innerText = data.level;
+
+            if (data.uncertainty !== undefined) {
+                document.getElementById('ui-uncertainty').innerText = data.uncertainty + '%';
+            }
+            if (data.question) {
+                document.getElementById('ui-question').innerText = data.question;
+                resetTTSForNewQuestion();
+                speakQuestion(data.question, true);
+            }
+
+            document.getElementById('ui-tech-score').innerText = '-';
+            document.getElementById('ui-conf-score').innerText = '-';
+            document.getElementById('xai-ideal').innerText = 'Awaiting evaluation...';
+            document.getElementById('xai-candidate').innerText = 'Awaiting evaluation...';
+            document.getElementById('xai-reason').innerText = '';
+
+            txtTranscription.value = '';
+            txtTranscription.disabled = true;
+            btnSubmit.classList.add('hidden');
+            btnNext.classList.add('hidden');
+
+            if (data.topic === 'DONE') {
+                stopTTS();
+                interviewInProgress = false;   // no more warning on sign-out
+                btnMic.disabled = true;
+                btnMic.title = 'Interview complete';
+
+                if (data.final_report) {
+                    reportContainer.style.display = 'block';
+                    reportText.innerText = data.final_report;
+                    reportContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            } else {
+                btnMic.disabled = false;
+                btnMic.title = 'Click or press Space to record';
+            }
+        });
+
+        // ========================================================================
+        //  SIGN-OUT WARNING MODAL
+        //  Intercepts the sign-out link only when an interview is mid-flight.
+        //  Outside of an interview the link navigates normally.
+        // ========================================================================
+        const logoutLink   = document.getElementById('btn-signout');
+        const logoutModal  = document.getElementById('logout-modal');
+        const modalCancel  = document.getElementById('modal-btn-cancel');
+        const modalConfirm = document.getElementById('modal-btn-confirm');
+        const LOGOUT_URL   = "{{ url_for('auth.logout') }}";
+
+        function openLogoutModal()  { logoutModal.classList.add('visible'); }
+        function closeLogoutModal() { logoutModal.classList.remove('visible'); }
+
+        logoutLink.addEventListener('click', (e) => {
+            if (!interviewInProgress) return;   // no warning needed, let it navigate
+            e.preventDefault();
+            openLogoutModal();
+        });
+
+        modalCancel.addEventListener('click', closeLogoutModal);
+
+        modalConfirm.addEventListener('click', () => {
+            // Suppress any second warning if the navigation races a popstate, etc.
+            interviewInProgress = false;
+            window.location.href = LOGOUT_URL;
+        });
+
+        // Click outside the card = cancel
+        logoutModal.addEventListener('click', (e) => {
+            if (e.target === logoutModal) closeLogoutModal();
+        });
+
+        // ESC closes the modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && logoutModal.classList.contains('visible')) {
+                closeLogoutModal();
+            }
+        });
+    </script>
+</body>
+</html>
